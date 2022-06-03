@@ -1,3 +1,3 @@
-from .generation_utils import generate_summaries_with_phrase_limits, load_model_and_tokenizer
+from .generation_utils import generate_summaries_with_phrase_limits, load_model_and_tokenizer, SUMMARY_FAILED_GENERATION
 from .beam_validators import BannedPhrases, EnforceSourceOverlap
 from .phrase_logits_processor import PhraseLogitsProcessor
