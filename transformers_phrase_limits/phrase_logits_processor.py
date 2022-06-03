@@ -1,7 +1,7 @@
 from collections import defaultdict
 import torch
 from transformers import LogitsProcessor
-from src.beam_validators import BeamValidator
+from transformers_phrase_limits.beam_validators import BeamValidator
 
 
 SPLIT_WORD_TOKENS = {" ", ".", ",", "_", "?", "!", "'"}

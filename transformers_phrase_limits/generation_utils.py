@@ -4,7 +4,7 @@ from transformers import (
     AutoTokenizer,
     LogitsProcessorList
 )
-from src.phrase_logits_processor import PhraseLogitsProcessor
+from transformers_phrase_limits.phrase_logits_processor import PhraseLogitsProcessor
 
 
 SUMMARY_FAILED_GENERATION = "<Failed generation: blocked all beams>"
