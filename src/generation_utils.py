@@ -4,7 +4,7 @@ from transformers import (
     AutoTokenizer,
     LogitsProcessorList
 )
-from src.word_logits_processor import WordLogitsProcessor
+from src.phrase_logits_processor import PhraseLogitsProcessor
 
 
 SUMMARY_FAILED_GENERATION = "<Failed generation: blocked all beams>"
@@ -35,11 +35,11 @@ def load_model_and_tokenizer(
     )
 
 
-def generate_summaries(
+def generate_summaries_with_phrase_limits(
     model,
     tokenizer,
     docs_to_summarize,
-    word_logits_processor: WordLogitsProcessor,
+    logits_processor: PhraseLogitsProcessor,
     num_beams=4,
     return_beam_metadata=False,
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
@@ -59,7 +59,7 @@ def generate_summaries(
         return_dict_in_generate=True,
         output_scores=True,
         logits_processor=LogitsProcessorList(
-            [] if word_logits_processor is None else [word_logits_processor]
+            [] if logits_processor is None else [logits_processor]
         ),
     )
     generated_summaries = [
@@ -68,8 +68,8 @@ def generate_summaries(
                 ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
             )
             if (
-                word_logits_processor is None
-                or idx not in word_logits_processor.failed_sequences
+                logits_processor is None
+                or idx not in logits_processor.failed_sequences
             )
             else SUMMARY_FAILED_GENERATION
         )
@@ -95,10 +95,10 @@ def generate_summaries(
                 "score": model_output.sequences_scores[seq_idx].item(),
                 "beams": [list() for _ in range(num_beams)],
                 "selected_beam_indices": top_beam_indices,
-                "dropped_seqs": word_logits_processor.excluded_beams_by_input_idx[
+                "dropped_seqs": logits_processor.excluded_beams_by_input_idx[
                     seq_idx
                 ],
-                "n_words_checked": word_logits_processor.words_to_check_by_input_idx[
+                "n_words_checked": logits_processor.words_to_check_by_input_idx[
                     seq_idx
                 ],
             }

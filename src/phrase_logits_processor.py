@@ -1,40 +1,36 @@
 from collections import defaultdict
 import torch
 from transformers import LogitsProcessor
-from src.beam_validators import WordValidator
+from src.beam_validators import BeamValidator
 
 
-SPLIT_WORD_TOKENS = {
-    ' ',
-    '.',
-    ',',
-    '_',
-    '?',
-    '!',
-    '\''
-}
+SPLIT_WORD_TOKENS = {" ", ".", ",", "_", "?", "!", "'"}
+
 
 def should_backtrack(subword: str):
     return not subword.startswith(" ")
 
+
 def is_subword_ending(subword: str):
     return subword.startswith(" ") or subword.endswith(" ")
-class WordLogitsProcessor(LogitsProcessor):
+
+
+class PhraseLogitsProcessor(LogitsProcessor):
     r"""
-    [`WordLogitsProcessor`] enforcing constraints on words during beam search
+    [`PhraseLogitsProcessor`] validates phrases during beam search
 
     Args:
         tokenizer (`AutoTokenizer`):
             The model's tokenizer
         num_beams (`int`):
             Number of beams.
-        word_validator (`WordValidator`):
-            Responsible for checking whether the word is valid.
+        beam_validator (`BeamValidator`):
+            Checks whether a beam is valid at the phrase-level
     """
 
-    def __init__(self, tokenizer, num_beams, word_validator: WordValidator):
+    def __init__(self, tokenizer, num_beams, beam_validator: BeamValidator):
         self.tokenizer = tokenizer
-        self.word_validator = word_validator
+        self.beam_validator = beam_validator
         self.num_beams = num_beams
         self.excluded_beams_by_input_idx = defaultdict(list)
         self.words_to_check_by_input_idx = defaultdict(lambda: 0)
@@ -42,17 +38,17 @@ class WordLogitsProcessor(LogitsProcessor):
 
     def is_valid_beam(
         self,
-        input_idx, # input idx being processed
+        input_idx,  # input idx being processed
         sequence,  # sequence generated so far
         token_id,  # next token to be generated (argmax of beam_scores)
-        beam_scores # probability of all tokens to be generated
+        beam_scores,  # probability of all tokens to be generated
     ):
         """
-            Check whether beam is valid according to the passed validators.
+        Check whether beam is valid according to the passed validators.
 
-            To enable validating on a word-level, this method backtracks
-            to collect the predicted word when it detects that the predicted
-            subword (token) is a word ending.
+        To enable validating on a word-level, this method backtracks
+        to collect the predicted word when it detects that the predicted
+        subword (token) is a word ending.
         """
         # Token-level checks
         # if token_id in self.banned_token_ids:
@@ -83,9 +79,8 @@ class WordLogitsProcessor(LogitsProcessor):
                     if prev_char not in SPLIT_WORD_TOKENS:
                         backtrack_word = prev_char + backtrack_word
                     else:
-                        if self.word_validator.is_maybe_invalid_phrase_ending(
-                            prev_char + backtrack_word,
-                            input_idx
+                        if self.beam_validator.is_maybe_invalid_phrase_ending(
+                            prev_char + backtrack_word, input_idx
                         ):
                             backtrack_word = prev_char + backtrack_word
                         else:
@@ -94,12 +89,8 @@ class WordLogitsProcessor(LogitsProcessor):
                     prev_char_idx -= 1
                 prev_subword_idx -= 1
             self.words_to_check_by_input_idx[input_idx] += 1
-            # Call validator to check whether the word is valid
-            if not self.word_validator.is_valid_word(
-                backtrack_word,
-                input_idx,
-                sequence,
-                beam_scores
+            if not self.beam_validator.is_valid_beam(
+                backtrack_word, input_idx, sequence, beam_scores
             ):
                 return False
         return True
@@ -116,17 +107,16 @@ class WordLogitsProcessor(LogitsProcessor):
             for prob, idx in zip(top_k[0], top_k[1]):
                 input_idx = beam_idx // self.num_beams
                 if not self.is_valid_beam(
-                    input_idx,
-                    beam_input_ids,
-                    idx.item(),
-                    scores[beam_idx]
+                    input_idx, beam_input_ids, idx.item(), scores[beam_idx]
                 ):
                     scores[beam_idx, :] = -float("inf")
-                    self.excluded_beams_by_input_idx[input_idx].append((
-                        beam_input_ids,
-                        idx.item(),
-                        prob.item(),
-                    ))
+                    self.excluded_beams_by_input_idx[input_idx].append(
+                        (
+                            beam_input_ids,
+                            idx.item(),
+                            prob.item(),
+                        )
+                    )
                     blocked_beams_by_input_idx[input_idx] += 1
 
         for input_idx, n_blocked in blocked_beams_by_input_idx.items():

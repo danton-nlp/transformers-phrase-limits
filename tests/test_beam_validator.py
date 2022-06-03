@@ -1,8 +1,11 @@
 from datasets import load_dataset
 import pytest
-from src.word_logits_processor import WordLogitsProcessor
+from src.phrase_logits_processor import PhraseLogitsProcessor
 from src.beam_validators import BannedPhrases
-from src.generation_utils import generate_summaries, load_model_and_tokenizer
+from src.generation_utils import (
+    generate_summaries_with_phrase_limits,
+    load_model_and_tokenizer,
+)
 
 
 @pytest.fixture(scope="session")
@@ -22,9 +25,9 @@ def test_no_constraints(bart_xsum, docs_to_summarize):
     model, tokenizer = bart_xsum
     num_beams = 4
 
-    summary = generate_summaries(model, tokenizer, docs_to_summarize, None, num_beams)[
-        0
-    ]
+    summary = generate_summaries_with_phrase_limits(
+        model, tokenizer, docs_to_summarize, None, num_beams
+    )[0]
 
     assert "Wales" in summary
     assert "former prison" in summary
@@ -34,34 +37,35 @@ def test_banned_word(bart_xsum, docs_to_summarize):
     model, tokenizer = bart_xsum
     num_beams = 4
 
-    factuality_enforcer = WordLogitsProcessor(
+    phrase_processor = PhraseLogitsProcessor(
         tokenizer,
         num_beams,
-        BannedPhrases({
-            "Wales",
-        }),
+        BannedPhrases(
+            {
+                "Wales",
+            }
+        ),
     )
 
-    summary = generate_summaries(
-        model, tokenizer, docs_to_summarize, factuality_enforcer, num_beams
+    summary = generate_summaries_with_phrase_limits(
+        model, tokenizer, docs_to_summarize, phrase_processor, num_beams
     )[0]
 
     assert "Wales" not in summary
+
 
 def test_banned_phrase(bart_xsum, docs_to_summarize):
     model, tokenizer = bart_xsum
     num_beams = 4
 
-    factuality_enforcer = WordLogitsProcessor(
+    phrase_processor = PhraseLogitsProcessor(
         tokenizer,
         num_beams,
-        BannedPhrases({
-            "former prison"
-        }),
+        BannedPhrases({"former prison"}),
     )
 
-    summary = generate_summaries(
-        model, tokenizer, docs_to_summarize, factuality_enforcer, num_beams
+    summary = generate_summaries_with_phrase_limits(
+        model, tokenizer, docs_to_summarize, phrase_processor, num_beams
     )[0]
 
     assert "former prison" not in summary
@@ -71,25 +75,25 @@ def test_failed_generation_one_beam(bart_xsum, docs_to_summarize):
     model, tokenizer = bart_xsum
     num_beams = 1
 
-    factuality_enforcer = WordLogitsProcessor(
+    phrase_processor = PhraseLogitsProcessor(
         tokenizer,
         num_beams,
         BannedPhrases({"prison"}),
     )
 
-    summary = generate_summaries(
-        model, tokenizer, docs_to_summarize, factuality_enforcer, num_beams
+    summary = generate_summaries_with_phrase_limits(
+        model, tokenizer, docs_to_summarize, phrase_processor, num_beams
     )[0]
 
     assert summary == "<Failed generation: blocked all beams>"
-    assert 0 in factuality_enforcer.failed_sequences
+    assert 0 in phrase_processor.failed_sequences
 
 
 def test_failed_generation_multiple_beams(bart_xsum, docs_to_summarize):
     model, tokenizer = bart_xsum
     num_beams = 4
 
-    factuality_enforcer = WordLogitsProcessor(
+    phrase_processor = PhraseLogitsProcessor(
         tokenizer,
         num_beams,
         BannedPhrases(
@@ -97,9 +101,9 @@ def test_failed_generation_multiple_beams(bart_xsum, docs_to_summarize):
         ),
     )
 
-    summary = generate_summaries(
-        model, tokenizer, docs_to_summarize, factuality_enforcer, num_beams
+    summary = generate_summaries_with_phrase_limits(
+        model, tokenizer, docs_to_summarize, phrase_processor, num_beams
     )[0]
 
     assert summary == "<Failed generation: blocked all beams>"
-    assert 0 in factuality_enforcer.failed_sequences
+    assert 0 in phrase_processor.failed_sequences

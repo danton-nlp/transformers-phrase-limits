@@ -1,1 +1,4 @@
 datasets==2.0.0
+black
+flake8
+pytest
